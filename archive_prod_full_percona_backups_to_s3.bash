@@ -17,18 +17,23 @@ S3_BUCKET="s3://aws-s3-link/bucket/"
 SERVER_NAME=$(hostname --fqdn)
 LOG_DIR=/path/to/log/dir
 
+# email function
+notify_email(){
+  mail -s "${0}: failed on ${SERVER_NAME}" $EMAIL
+}
+
 # make sure our log directory exists
 if [ ! -d $LOG_DIR ]; then
   mkdir $LOG_DIR
   if [ ! $? -eq 0 ]; then
-    echo "Unable to create log dir: $LOG_DIR" |mail -s "${0}: failed on $SERVER_NAME" $EMAIL
+    echo "Unable to create log dir: $LOG_DIR" | notify_email
     exit 1
   fi
 else
   touch $LOG_DIR/test
   rm $LOG_DIR/test
   if [ ! $? -eq 0 ]; then
-    echo "Unable to write to log dir: $LOG_DIR" |mail -s "${0}: failed on $SERVER_NAME" $EMAIL
+    echo "Unable to write to log dir: $LOG_DIR" | notify_email
     exit 1
   fi
 fi
@@ -37,7 +42,7 @@ fi
 touch $LOCAL_BACKUP_DIR/test
 rm $LOCAL_BACKUP_DIR/test
 if [ ! $? -eq 0 ]; then
-  echo "Unable to write to backup dir: $LOCAL_BACKUP_DIR" |mail -s "${0}: failed on $SERVER_NAME" $EMAIL
+  echo "Unable to write to backup dir: $LOCAL_BACKUP_DIR" | notify_email
   exit 1
 fi
 
@@ -47,7 +52,7 @@ for i in $(find . -type f -daystart -ctime 0 -name "*.gz" | cut -d/ -f2); do
 sudo -u gpg_user -i gpg -e --default-recipient 'gpg_key@meta.red' -a ${LOCAL_BACKUP_DIR}/$i
 done
 if [ ! $? -eq 0 ]; then
-  echo "Unable to encrypt backups from $LOCAL_BACKUP_DIR" |mail -s "${0}: failed on $SERVER_NAME" $EMAIL
+  echo "Unable to encrypt backups from $LOCAL_BACKUP_DIR" | notify_email
   exit 1
 fi
 
@@ -57,7 +62,7 @@ S3_START_TIME="$(date)"
 for i in $(find . -type f -daystart -ctime 0 -name "*.asc" | cut -d/ -f2); do
 sudo -u gpg_user -i aws s3 cp ${LOCAL_BACKUP_DIR}/$i $S3_BUCKET
    if [ ! $? -eq 0 ]; then
-       echo "Unable to copy backup file: $i to $S3_BUCKET" |mail -s "${0}: failed on $SERVER_NAME" $EMAIL
+       echo "Unable to copy backup file: $i to $S3_BUCKET" | notify_email
        S3_RETRY_COUNT=1
        until [ $S3_RETRY_COUNT -gt 3 ]; do
        echo "Retrying to copy backup file: $i to $S3_BUCKET for attempt number $S3_RETRY_COUNT" |mail -s "${0}: RE-TRY number $S3_RETRY_COUNT on $SERVER_NAME" $EMAIL

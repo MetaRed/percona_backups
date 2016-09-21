@@ -1,10 +1,15 @@
 #!/bin/bash
-# 
+#
 # Percona database backup wrapper
-# 
+#
 
 EMAIL=bigkahuna@meta.red
 SERVER_NAME=$(hostname --fqdn)
+
+# email function
+notify_email(){
+  mail -s "${0}: failed on ${SERVER_NAME}" $EMAIL
+}
 
 # Do not fill data volume if S3 copy failed after 3 attempts
 # Abort backups
@@ -19,7 +24,7 @@ START_TIME="$(date)"
 # database structure backup
 sudo -u mysql /backup_scripts/percona_backup_scripts/percona_prod_structure_database_backup.bash
 if [ ! $? -eq 0 ]; then
-  echo "percona_prod_structure_database_backup.bash exited with nonzero status" |mail -s "${0}: failed on $SERVER_NAME" $EMAIL
+  echo "percona_prod_structure_database_backup.bash exited with nonzero status" | notify_email
   rm -f /tmp/percona_prod_structure_database_backup.time
   exit 1
 fi
@@ -27,7 +32,7 @@ fi
 # full database backup
 sudo -u mysql /backup_scripts/percona_backup_scripts/percona_prod_full_database_backup.bash
 if [ ! $? -eq 0 ]; then
-  echo "percona_prod_full_database_backup.bash exited with nonzero status" |mail -s "${0}: failed on $SERVER_NAME" $EMAIL
+  echo "percona_prod_full_database_backup.bash exited with nonzero status" | notify_email
   rm -f /tmp/percona_prod_full_database_backup.time
   exit 1
 fi
@@ -36,7 +41,7 @@ fi
 # exit if it fails, fast S3 copy dependent on file compression
 /backup_scripts/percona_backup_scripts/compress_prod_full_percona_backups.bash
 if [ ! $? -eq 0 ]; then
-  echo "compress_prod_full_percona_backups.bash exited with nonzero status" |mail -s "${0}: failed on $SERVER_NAME" $EMAIL
+  echo "compress_prod_full_percona_backups.bash exited with nonzero status" | notify_email
   exit 1
 fi
 
@@ -45,7 +50,7 @@ fi
 touch /tmp/archive_prod_full_percona_backups_to_s3.test
 /backup_scripts/percona_backup_scripts/archive_prod_full_percona_backups_to_s3.bash
 if [ ! $? -eq 0 ]; then
-  echo "archive_prod_full_percona_backups_to_s3.bash exited with nonzero status" |mail -s "${0}: failed on $SERVER_NAME" $EMAIL
+  echo "archive_prod_full_percona_backups_to_s3.bash exited with nonzero status" | notify_email
   END_TIME="$(date)"
   echo "MYSQL DATA BACKUP STARTED AT: ${START_TIME} FINISHED AT ${END_TIME}"
   exit 1
